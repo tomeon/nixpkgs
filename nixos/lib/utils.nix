@@ -174,11 +174,18 @@ rec {
 
   # Like genJqSecretsReplacementSnippet, but allows the name of the
   # attr which identifies the secret to be changed.
+  #
+  # Unlinks `output` if and only if it is a symlink to a regular file; this
+  # permits doing things like this:
+  #
+  #   genJqSecretsReplacementSnippet' "_secret" { ... } "/dev/stdout"
+  #
+  # in cases where secrets don't need to touch the filesystem.
   genJqSecretsReplacementSnippet' = attr: set: output:
     let
       secrets = recursiveGetAttrWithJqPrefix set attr;
     in ''
-      if [[ -h '${output}' ]]; then
+      if [[ -h '${output}' ]] && [[ -f '${output}' ]]; then
         rm '${output}'
       fi
 
