@@ -8,6 +8,10 @@ import ./make-test-python.nix ({ lib, pkgs, ... }: {
       services.syncthing = {
         enable = true;
         openDefaultPorts = true;
+        extraOptions.gui = {
+          user = "me";
+          password._secret = pkgs.writeText "syncthing-gui-password" "hunter2";
+        };
       };
     };
     b = a;
@@ -66,6 +70,23 @@ import ./make-test-python.nix ({ lib, pkgs, ... }: {
 
         return putConf(host, conf, APIKey=APIKey)
 
+    def checkConf(host):
+      guiConf = makeReq(host, "/rest/config/gui")
+      conf = json.loads(guiConf)
+
+      for field in ["user", "password"]:
+          with host.nested("GUI configuration must contain '%s'" % field):
+              if field not in conf:
+                  raise Exception("'%s' missing from GUI configuration" % field)
+
+      with host.nested("GUI user must be 'me'"):
+          if conf["user"] != "me":
+              raise Exception("wrong GUI user; expected 'me', got '%s'" % conf["user"])
+
+      with host.nested("GUI password should be encrypted"):
+          if not conf["password"].startswith("$"):
+              raise Exception("expected GUI password to be encrypted; got '%s'" % conf["password"])
+
 
     start_all()
     a.wait_for_unit("syncthing.service")
@@ -73,10 +94,19 @@ import ./make-test-python.nix ({ lib, pkgs, ... }: {
     a.wait_for_open_port(22000)
     b.wait_for_open_port(22000)
 
+    # Block until `syncthing-init` completes; otherwise, Syncthing may not yet
+    # have updated to reflect the settings from `devices`, `folders`, and/or
+    # `extraConfig`.
+    a.wait_for_unit("syncthing-init.service", substate="exited")
+    b.wait_for_unit("syncthing-init.service", substate="exited")
+
     aDeviceID = a.succeed("syncthing -home=%s -device-id" % confdir).strip()
     bDeviceID = b.succeed("syncthing -home=%s -device-id" % confdir).strip()
     addPeer(a, "b", bDeviceID)
     addPeer(b, "a", aDeviceID)
+
+    checkConf(a)
+    checkConf(b)
 
     a.wait_for_file("/var/lib/syncthing/foo")
     b.wait_for_file("/var/lib/syncthing/foo")
