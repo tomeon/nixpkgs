@@ -16,18 +16,44 @@ import ./make-test-python.nix ({ lib, pkgs, ... }: {
   testScript = ''
     import json
     import shlex
+    from urllib.parse import urlparse
 
     confdir = "/var/lib/syncthing/.config/syncthing"
+    baseurl = urlparse("http://127.0.0.1:8384")
 
-
-    def addPeer(host, name, deviceID):
-        APIKey = host.succeed(
+    def apiKey(host):
+        return host.succeed(
             "xmllint --xpath 'string(configuration/gui/apikey)' %s/config.xml" % confdir
         ).strip()
-        oldConf = host.succeed(
-            "curl -Ssf -H 'X-API-Key: %s' 127.0.0.1:8384/rest/config" % APIKey
-        )
-        conf = json.loads(oldConf)
+
+    def makeReq(host, path, *args, **kwargs):
+        APIKey = kwargs.get('APIKey', apiKey(host))
+
+        cmd = [
+          "curl",
+          "-Ssf",
+          "-H", ("X-API-Key: %s" % APIKey),
+          baseurl._replace(path=path).geturl(),
+        ] + list(args)
+
+        return host.succeed(shlex.join(cmd))
+
+    def reqConf(host, *args, **kwargs):
+        return makeReq(host, "/rest/config", *args, **kwargs)
+
+    def getConf(host, *args, **kwargs):
+        oldConf = reqConf(host, *args, **kwargs)
+        return json.loads(oldConf)
+
+    def putConf(host, conf, *args, **kwargs):
+        newConf = json.dumps(conf)
+        return reqConf(host, "-X", "PUT", "-d", newConf, *args, **kwargs)
+
+    def addPeer(host, name, deviceID):
+        APIKey = apiKey(host)
+
+        conf = getConf(host, APIKey=APIKey)
+
         conf["devices"].append({"deviceID": deviceID, "id": name})
         conf["folders"].append(
             {
@@ -37,11 +63,8 @@ import ./make-test-python.nix ({ lib, pkgs, ... }: {
                 "rescanIntervalS": 1,
             }
         )
-        newConf = json.dumps(conf)
-        host.succeed(
-            "curl -Ssf -H 'X-API-Key: %s' 127.0.0.1:8384/rest/config -X PUT -d %s"
-            % (APIKey, shlex.quote(newConf))
-        )
+
+        return putConf(host, conf, APIKey=APIKey)
 
 
     start_all()
