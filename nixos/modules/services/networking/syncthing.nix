@@ -1,4 +1,4 @@
-{ config, lib, options, pkgs, ... }:
+{ config, lib, options, pkgs, utils, ... }:
 
 with lib;
 
@@ -27,47 +27,55 @@ let
     folder.enable
   ) cfg.folders);
 
-  updateConfig = pkgs.writers.writeDash "merge-syncthing-config" ''
-    set -efu
+  updateConfig =
+    let
+      secretSnippet = utils.genJqSecretsReplacementSnippet cfg.extraOptions "/dev/stdout";
+    in
+    pkgs.writers.writeBash "merge-syncthing-config" ''
+      set -efu
 
-    # be careful not to leak secrets in the filesystem or in process listings
+      # be careful not to leak secrets in the filesystem or in process listings
 
-    umask 0077
+      umask 0077
 
-    # get the api key by parsing the config.xml
-    while
-        ! ${pkgs.libxml2}/bin/xmllint \
-            --xpath 'string(configuration/gui/apikey)' \
-            ${cfg.configDir}/config.xml \
-            >"$RUNTIME_DIRECTORY/api_key"
-    do sleep 1; done
+      # get the api key by parsing the config.xml
+      while
+          ! ${pkgs.libxml2}/bin/xmllint \
+              --xpath 'string(configuration/gui/apikey)' \
+              ${cfg.configDir}/config.xml \
+              >"$RUNTIME_DIRECTORY/api_key"
+      do sleep 1; done
 
-    (printf "X-API-Key: "; cat "$RUNTIME_DIRECTORY/api_key") >"$RUNTIME_DIRECTORY/headers"
+      (printf "X-API-Key: "; cat "$RUNTIME_DIRECTORY/api_key") >"$RUNTIME_DIRECTORY/headers"
 
-    curl() {
-        ${pkgs.curl}/bin/curl -sSLk -H "@$RUNTIME_DIRECTORY/headers" \
-            --retry 1000 --retry-delay 1 --retry-all-errors \
-            "$@"
-    }
+      curl() {
+          ${pkgs.curl}/bin/curl -sSLk -H "@$RUNTIME_DIRECTORY/headers" \
+              --retry 1000 --retry-delay 1 --retry-all-errors \
+              "$@"
+      }
 
-    # query the old config
-    old_cfg=$(curl ${cfg.guiAddress}/rest/config)
+      # query the old config
+      old_cfg=$(curl ${cfg.guiAddress}/rest/config)
 
-    # generate the new config by merging with the NixOS config options
-    new_cfg=$(printf '%s\n' "$old_cfg" | ${pkgs.jq}/bin/jq -c '. * {
-        "devices": (${builtins.toJSON devices}${optionalString (cfg.devices == {} || ! cfg.overrideDevices) " + .devices"}),
-        "folders": (${builtins.toJSON folders}${optionalString (cfg.folders == {} || ! cfg.overrideFolders) " + .folders"})
-    } * ${builtins.toJSON cfg.extraOptions}')
+      # generate the new config by merging with the NixOS config options
+      new_cfg=$({
+        printf '%s\n' "$old_cfg"
+        ${pkgs.jq}/bin/jq -n -c '{
+          "devices": (${builtins.toJSON devices}${optionalString (cfg.devices == {} || ! cfg.overrideDevices) " + .devices"}),
+          "folders": (${builtins.toJSON folders}${optionalString (cfg.folders == {} || ! cfg.overrideFolders) " + .folders"})
+        }'
+        ${secretSnippet}
+      } | ${pkgs.jq}/bin/jq -n -c 'reduce inputs as $input ({}; . * $input)')
 
-    # send the new config
-    curl -X PUT -d "$new_cfg" ${cfg.guiAddress}/rest/config
+      # send the new config
+      curl -X PUT -d "$new_cfg" ${cfg.guiAddress}/rest/config
 
-    # restart Syncthing if required
-    if curl ${cfg.guiAddress}/rest/config/restart-required |
-       ${pkgs.jq}/bin/jq -e .requiresRestart > /dev/null; then
-        curl -X POST ${cfg.guiAddress}/rest/system/restart
-    fi
-  '';
+      # restart Syncthing if required
+      if curl ${cfg.guiAddress}/rest/config/restart-required |
+         ${pkgs.jq}/bin/jq -e .requiresRestart > /dev/null; then
+          curl -X POST ${cfg.guiAddress}/rest/system/restart
+      fi
+    '';
 in {
   ###### interface
   options = {
@@ -384,10 +392,23 @@ in {
         description = mdDoc ''
           Extra configuration options for Syncthing.
           See <https://docs.syncthing.net/users/config.html>.
+
+          Options containing secret data should be set to an attribute set
+          containing the attribute `_secret` - a string pointing to a file
+          containing the value the option should be set to. See the example to
+          get a better picture of this: in the resulting Syncthing
+          configuration, the `gui.password` option will be set to the contents
+          of the `/run/secrets/syncthing-password` file.
         '';
         example = {
           options.localAnnounceEnabled = false;
-          gui.theme = "black";
+          gui = {
+            theme = "black";
+            user = "myuser";
+            password = {
+              _secret = "/run/secrets/syncthing-password";
+            };
+          };
         };
       };
 
