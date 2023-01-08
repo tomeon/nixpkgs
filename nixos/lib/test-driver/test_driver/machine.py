@@ -427,9 +427,15 @@ class Machine:
             return self.wait_for_monitor_prompt()
 
     def wait_for_unit(
-        self, unit: str, user: Optional[str] = None, timeout: int = 900
+        self,
+        unit: str,
+        user: Optional[str] = None,
+        timeout: int = 900,
+        substate: Optional[str] = None,
     ) -> None:
-        """Wait for a systemd unit to get into "active" state.
+        """Wait for a systemd unit to get into "active" state and an optional
+        substate (e.g. "exited").
+
         Throws exceptions on "failed" and "inactive" states as well as
         after timing out.
         """
@@ -449,7 +455,9 @@ class Machine:
                             f'unit "{unit}" is inactive and there are no pending jobs'
                         )
 
-            return state == "active"
+            return state == "active" and (
+                (substate is None) or substate == info["SubState"]
+            )
 
         with self.nested(
             f"waiting for unit {unit}"
