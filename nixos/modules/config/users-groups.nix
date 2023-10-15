@@ -424,7 +424,7 @@ let
       };
 
       linger = mkOption {
-        type = types.bool;
+        type = types.nullOr types.bool;
         default = false;
         description = ''
           Whether to enable lingering for this user. If true, systemd user
@@ -434,6 +434,9 @@ let
 
           If false, user units will not be started until the user logs in, and
           may be stopped on logout depending on the settings in `logind.conf`.
+
+          If null, no change will be made to the user's current lingering
+          configuration.
         '';
       };
     };
