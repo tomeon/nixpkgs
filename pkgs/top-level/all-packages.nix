@@ -30828,6 +30828,8 @@ with pkgs;
 
   dockstarter = callPackage ../tools/virtualization/dockstarter { };
 
+  docuum = callPackage ../tools/virtualization/docuum { };
+
   doodle = callPackage ../applications/search/doodle { };
 
   dr14_tmeter = callPackage ../applications/audio/dr14_tmeter { };
