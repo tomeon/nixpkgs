@@ -682,6 +682,7 @@
   ./services/misc/dictd.nix
   ./services/misc/disnix.nix
   ./services/misc/docker-registry.nix
+  ./services/misc/docuum.nix
   ./services/misc/domoticz.nix
   ./services/misc/duckling.nix
   ./services/misc/dwm-status.nix

@@ -254,6 +254,7 @@ in {
   docker-tools-overlay = handleTestOn ["x86_64-linux"] ./docker-tools-overlay.nix {};
   documize = handleTest ./documize.nix {};
   documentation = pkgs.callPackage ../modules/misc/documentation/test.nix { inherit nixosLib; };
+  docuum = handleTestOn ["aarch64-linux" "x86_64-linux"] ./docuum.nix {};
   doh-proxy-rust = handleTest ./doh-proxy-rust.nix {};
   dokuwiki = handleTest ./dokuwiki.nix {};
   dolibarr = handleTest ./dolibarr.nix {};
