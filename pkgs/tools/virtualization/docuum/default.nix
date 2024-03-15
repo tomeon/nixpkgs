@@ -1,5 +1,6 @@
 { lib
 , fetchFromGitHub
+, nixosTests
 , rustPlatform
 }:
 let
@@ -28,6 +29,8 @@ rustPlatform.buildRustPackage {
   preCheck = ''
     export NO_COLOR=true
   '';
+
+  passthru.tests = { inherit (nixosTests) docuum; };
 
   meta = {
     description = "Least-recently-used (LRU) eviction of Docker images";
