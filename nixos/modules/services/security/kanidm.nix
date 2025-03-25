@@ -12,12 +12,14 @@ let
     attrValues
     concatLines
     concatLists
+    const
     converge
     filter
     filterAttrs
     filterAttrsRecursive
     flip
     foldl'
+    genAttrs
     getExe
     hasInfix
     hasPrefix
@@ -29,6 +31,7 @@ let
     mkIf
     mkMerge
     mkOption
+    mkOrder
     mkPackageOption
     optional
     optionals
@@ -1025,8 +1028,12 @@ in
 
     system.nssModules = mkIf cfg.enablePam [ cfg.package ];
 
-    system.nssDatabases.group = optional cfg.enablePam "kanidm";
-    system.nssDatabases.passwd = optional cfg.enablePam "kanidm";
+    # > NOTE: Unlike other nsswitch modules, Kanidm should be before compat
+    # > or files. This is because Kanidm caches and provides the content
+    # > from /etc/passwd and /etc/group.
+    #
+    # https://kanidm.github.io/kanidm/stable/integrations/pam_and_nsswitch.html
+    system.nssDatabases = mkIf cfg.enablePam (genAttrs ["group" "passwd"] (const (mkOrder 50 "kanidm")));
 
     users.groups = mkMerge [
       (mkIf cfg.enableServer { kanidm = { }; })
