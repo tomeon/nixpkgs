@@ -980,6 +980,7 @@ in
 
         BindReadOnlyPaths = [
           "/nix/store"
+          "/etc/shadow"
           "-/etc/resolv.conf"
           "-/etc/nsswitch.conf"
           "-/etc/hosts"
@@ -1008,6 +1009,7 @@ in
         RestrictAddressFamilies = [ "AF_UNIX" ];
         TemporaryFileSystem = "/:ro";
         Restart = "on-failure";
+        SupplementaryGroups = [ "shadow" ];
       };
       environment.RUST_LOG = "info";
     };
